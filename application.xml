@@ -1,0 +1,33 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<application xmlns="http://ns.adobe.com/air/application/26.0">
+  <id>PixelPaletteNew</id>
+  <versionNumber>1.0</versionNumber>
+  <filename>PixelPaletteNew</filename>
+  <name>PixelPaletteNew</name>
+  <initialWindow>
+    <title>Pixel Palette</title>
+    <content>PixelPaletteNew.swf</content>
+    <systemChrome>standard</systemChrome>
+    <transparent>false</transparent>
+    <visible>true</visible>
+    <minimizable>true</minimizable>
+    <maximizable>true</maximizable>
+    <resizable>true</resizable>
+    <minSize>800 600</minSize>
+  </initialWindow>
+  <!-- 
+	More options:
+	http://livedocs.adobe.com/flex/3/html/File_formats_1.html#1043413
+	-->
+  <android>
+    <manifestAdditions><![CDATA[<manifest android:installLocation="auto" xmlns:android="http://schemas.android.com/apk/res/android" />]]></manifestAdditions>
+  </android>
+  <icon>
+    <image16x16>icons/PixelPaletteNew16.png</image16x16>
+    <image29x29>icons/PixelPaletteNew29.png</image29x29>
+    <image32x32>icons/PixelPaletteNew32.png</image32x32>
+    <image36x36>icons/PixelPaletteNew36.png</image36x36>
+    <image40x40>icons/PixelPaletteNew40.png</image40x40>
+    <image48x48>icons/PixelPaletteNew48.png</image48x48>
+  </icon>
+</application>
