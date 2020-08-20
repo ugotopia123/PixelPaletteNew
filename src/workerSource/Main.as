@@ -1,15 +1,15 @@
 package {
 	import flash.display.Bitmap;
 	import flash.display.BitmapData;
-	import flash.display.JPEGEncoderOptions;
 	import flash.display.Loader;
 	import flash.display.LoaderInfo;
-	import flash.display.PNGEncoderOptions;
 	import flash.display.Sprite;
 	import flash.events.Event;
+	import flash.events.ProgressEvent;
+	import flash.filesystem.File;
 	import flash.geom.Matrix;
 	import flash.geom.Rectangle;
-	import flash.net.URLRequest;
+	import flash.net.FileFilter;
 	import flash.system.MessageChannel;
 	import flash.system.Worker;
 	import flash.utils.ByteArray;
@@ -19,8 +19,11 @@ package {
 	 * @author Alec Spilman
 	 */
 	public class Main extends Sprite {
+		private static const SEGMENTATION:uint = 1000;
 		private var mainToWorkerChannel:MessageChannel;
 		private var workerToMainChannel:MessageChannel;
+		private var importFile:File;
+		private var fileName:String;
 		private var fileExtension:String;
 		private var currentState:String = "";
 		
@@ -83,8 +86,8 @@ package {
 						workerToMainChannel.send("Current palette must be set before color can be added");
 					}
 					else {
-						drawImage();
 						acknowledgeMessage = false;
+						drawImage();
 					}
 				}
 				else if (message == MessageEnum.SEND_DRAW_CONFIRMATION) {
@@ -97,9 +100,6 @@ package {
 					else if (currentState == MessageEnum.SET_PALETTE) {
 						Palette.currentPalette = Palette.getPalette(message);
 					}
-					else if (currentState == MessageEnum.SET_IMAGE_EXTENSION) {
-						fileExtension = message;
-					}
 					else if (currentState == MessageEnum.ADD_COLOR_TO_SET_PALETTE) {
 						if (Palette.currentPalette == null) {
 							workerToMainChannel.send("Current palette must be set before color can be added");
@@ -110,6 +110,13 @@ package {
 					}
 					else if (currentState == MessageEnum.DELETE_PALETTE) {
 						Palette.getPalette(message).deletePalette();
+					}
+					else if (currentState == MessageEnum.BROWSE_FILE_FOR_IMPORT) {
+						importFile = new File(message);
+						importFile.addEventListener(Event.COMPLETE, fileLoadComplete);
+						importFile.addEventListener(ProgressEvent.PROGRESS, fileLoadProgress);
+						acknowledgeMessage = false;
+						importFile.load();
 					}
 					else {
 						workerToMainChannel.send("Invalid command sent to the worker");
@@ -127,18 +134,29 @@ package {
 			}
 		}
 		
+		private function fileLoadProgress(e:ProgressEvent):void {
+			workerToMainChannel.send("Importing: " + (Math.round(e.bytesLoaded / e.bytesTotal * 1000) / 10) + "%");
+		}
+		
+		private function fileLoadComplete(e:Event):void {
+			importFile.removeEventListener(Event.COMPLETE, fileLoadComplete);
+			importFile.removeEventListener(ProgressEvent.PROGRESS, fileLoadProgress);
+			fileName = importFile.name;
+			fileExtension = importFile.name.substring(importFile.name.length - 3, importFile.name.length);
+			workerToMainChannel.send("File" + fileName);
+			drawImage();
+		}
+		
 		private function drawImage():void {
-			var bytes:ByteArray = Worker.current.getSharedProperty("imageBytes");
-			
 			if (fileExtension == "bmp") {
 				var decoder:BMPDecoder = new BMPDecoder();
-				var data:BitmapData = decoder.decode(bytes);
+				var data:BitmapData = decoder.decode(importFile.data);
 				redrawBitmap(new Bitmap(data));
 			}
 			else {
 				var loader:Loader = new Loader();
 				loader.contentLoaderInfo.addEventListener(Event.COMPLETE, loaderComplete);
-				loader.loadBytes(bytes);
+				loader.loadBytes(importFile.data);
 			}
 		}
 		
@@ -150,23 +168,46 @@ package {
 		
 		private function redrawBitmap(target:Bitmap):void {
 			var copyBitmap:Bitmap = new Bitmap(new BitmapData(target.width, target.height, true, 0));
-			var drawSprite:Sprite = new Sprite();
+			var vectorWidth:uint = Math.ceil(target.width / SEGMENTATION);
+			var vectorHeight:uint = Math.ceil(target.height / SEGMENTATION);
+			var totalPixels:uint = target.width * target.height;
+			var increment:uint;
+			var pixels:Vector.<uint>;
+			var drawPixels:Vector.<uint> = new Vector.<uint>();
 			
-			for (var y:uint = 0; y < target.height; y++) {
-				for (var x:uint = 0; x < target.width; x++) {
-					var pixel:uint = target.bitmapData.getPixel32(x, y);
-					var closest:Number = Palette.currentPalette.getLeastDifference((0xFFFFFF & pixel));
-					var alpha:Number = Math.round(((pixel >> 24) & 0xFF) / 255 * 100) / 100;
-					drawSprite.graphics.beginFill(closest, alpha);
-					drawSprite.graphics.drawRect(x, 0, 1, 1);
-					drawSprite.graphics.endFill();
-				}
+			for (var i:uint = 0; i < vectorWidth * vectorHeight; i++) {
+				var startX:uint = i % vectorWidth * SEGMENTATION;
+				var startY:uint = Math.floor(i / vectorWidth) * SEGMENTATION;
+				var drawWidth:uint = target.width - startX;
+				var drawHeight:uint = target.height - startY;
 				
-				copyBitmap.bitmapData.draw(drawSprite, new Matrix(1, 0, 0, 1, 0, y));
-				drawSprite.graphics.clear();
-				workerToMainChannel.send("Drawing " + (Math.round(y / target.height * 10000) / 100) + "% complete");
+				if (drawWidth > SEGMENTATION) drawWidth = SEGMENTATION;
+				if (drawHeight > SEGMENTATION) drawHeight = SEGMENTATION;
+				
+				var drawRect:Rectangle = new Rectangle(startX, startY, drawWidth, drawHeight);
+				pixels = target.bitmapData.getVector(drawRect);
+				
+				for (var j:uint = 0; j < pixels.length; j++) {
+					var currentPixel:uint = pixels[j];
+					var closest:Number = Palette.currentPalette.getLeastDifference((0xFFFFFF & currentPixel));
+					var alpha:Number = (currentPixel >> 24) & 0xFF;
+					drawPixels.push((alpha << 24) | closest);
+					increment++;
+					
+					if (increment % target.width == 0) {
+						workerToMainChannel.send("Drawing " + (Math.round(increment / totalPixels * 10000) / 100) + "% complete");
+					}
+					
+					if (j == pixels.length - 1) {
+						copyBitmap.bitmapData.setVector(drawRect, drawPixels);
+						drawPixels.length = 0;
+					}
+				}
 			}
 			
+			target.bitmapData.dispose();
+			target.bitmapData = null;
+			pixels.length = drawPixels.length = 0;
 			var bytes:ByteArray = new ByteArray();
 			bytes.writeUnsignedInt(copyBitmap.width);
 			bytes.writeUnsignedInt(copyBitmap.height);

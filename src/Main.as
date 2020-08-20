@@ -16,6 +16,7 @@ package {
 	import flash.display.StageScaleMode;
 	import flash.events.Event;
 	import flash.events.MouseEvent;
+	import flash.filesystem.File;
 	import flash.geom.Point;
 	import flash.system.MessageChannel;
 	import flash.system.Worker;
@@ -33,6 +34,7 @@ package {
 		
 		private static var _mainContainer:Sprite = new Sprite();
 		private static var _mainDrawable:Sprite = new Sprite();
+		private static var _currentFileName:String;
 		private static var _stageInstance:Stage;
 		private static var _mainToWorkerChannel:MessageChannel;
 		private static var _workerToMainChannel:MessageChannel;
@@ -51,6 +53,7 @@ package {
 		
 		public static function get mainContainer():Sprite { return _mainContainer; }
 		public static function get mainDrawable():Sprite { return _mainDrawable; }
+		public static function get currentFileName():String { return _currentFileName; }
 		public static function get stageInstance():Stage { return _stageInstance; }
 		public static function get ready():Boolean { return messageQueue.length == 0; }
 		
@@ -126,10 +129,13 @@ package {
 				_mainDrawable.y = (stage.stageHeight - _mainDrawable.height) / 2;
 				_mainToWorkerChannel.send(MessageEnum.SEND_DRAW_CONFIRMATION);
 			}
-			else if (message is String) {
+			else if (message.indexOf("File") != -1) {
+				_currentFileName = message.replace("File", "");
+			}
+			else {
 				debug.text = message;
-				debug.width = debug.textWidth + 16;
-				debug.height = debug.textHeight + 16;
+				debug.width = debug.textWidth + 8;
+				debug.height = debug.textHeight + 8;
 			}
 		}
 		

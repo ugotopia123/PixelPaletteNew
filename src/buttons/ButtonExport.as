@@ -20,7 +20,7 @@ package buttons {
 				var data:BitmapData = new BitmapData(Main.mainDrawable.width / Main.mainDrawable.scaleX, Main.mainDrawable.height / Main.mainDrawable.scaleX, true, 0);
 				data.draw(Main.mainDrawable);
 				var bytes:ByteArray = PNGEncoder.encode(data);
-				saveReference.save(bytes, ImportImage.fileName + ButtonPalette.currentPalette.palette.paletteName + ".png");
+				saveReference.save(bytes, Main.currentFileName.substring(0, Main.currentFileName.length - 4) + ButtonPalette.currentPalette.palette.paletteName + ".png");
 			}
 		}
 	}
