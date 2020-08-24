@@ -12,7 +12,7 @@ set OUTPUT=-target bundle %AIR_NAME%
 :: Package
 echo.
 echo Packaging %AIR_NAME%%AIR_TARGET%.air using certificate %CERT_FILE%...
-call adt -package %OPTIONS% %SIGNING_OPTIONS% %OUTPUT% %APP_XML% %FILE_OR_DIR%
+call adt -package %OPTIONS% %SIGNING_OPTIONS% -target bundle PixelPaletteNew application.xml %FILE_OR_DIR%
 if errorlevel 1 goto failed
 goto end
 

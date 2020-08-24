@@ -8,7 +8,7 @@
     <movie fps="60" />
     <movie width="1024" />
     <movie height="768" />
-    <movie version="26" />
+    <movie version="28" />
     <movie minorVersion="0" />
     <movie platform="AIR" />
     <movie background="#FFFFFF" />
