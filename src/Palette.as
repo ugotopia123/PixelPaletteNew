@@ -38,6 +38,11 @@ package {
 			}
 			
 			new ButtonPalette(_paletteName.substring(0, 7), this);
+			
+			if (ButtonPalette.currentPalette != null) {
+				Main.sendMessage(MessageEnum.SET_PALETTE);
+				Main.sendMessage(ButtonPalette.currentPalette.palette._paletteName);
+			}
 		}
 		
 		public static function createPalette(name:String, initColors:Vector.<uint>):void {

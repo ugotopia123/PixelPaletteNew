@@ -12,6 +12,8 @@ package {
 		public static const DRAW_PALETTE:String = "drawPalette";
 		public static const DELETE_PALETTE:String = "deletePalette";
 		public static const PREVIOUS_MESSAGE_COMPLETE:String = "previousMessageComplete";
+		public static const INIT_DRAW:String = "initDraw";
+		public static const CHUNK_COMPLETE:String = "chunkComplete";
 		public static const DRAW_COMPLETE:String = "drawComplete";
 		public static const SEND_DRAW_CONFIRMATION:String = "sendDrawConfirmation";
 		public static const WORKER_QUERY:String = "workerQuery";

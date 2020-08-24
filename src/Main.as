@@ -1,4 +1,5 @@
 package {
+	import buttons.ButtonCopy;
 	import buttons.ButtonError;
 	import buttons.ButtonExport;
 	import buttons.ButtonRedraw;
@@ -18,7 +19,9 @@ package {
 	import flash.events.MouseEvent;
 	import flash.filesystem.File;
 	import flash.geom.Point;
+	import flash.geom.Rectangle;
 	import flash.system.MessageChannel;
+	import flash.system.System;
 	import flash.system.Worker;
 	import flash.system.WorkerDomain;
 	import flash.text.TextField;
@@ -45,6 +48,9 @@ package {
 		private static var previousMousePosition:Point = new Point();
 		private static var messageQueue:Array = new Array();
 		private static var debug:TextField;
+		private static var drawBitmap:Bitmap = new Bitmap();
+		private static var drawData:BitmapData = new BitmapData(1, 1);
+		private static var drawIncrement:uint;
 		
 		public function Main() {
 			if (stage) init();
@@ -97,6 +103,7 @@ package {
 			new ButtonRedraw();
 			new ButtonExport();
 			new ButtonError();
+			new ButtonCopy();
 		}
 		
 		public static function get mainToWorkerChannel():MessageChannel { return _mainToWorkerChannel; }
@@ -112,21 +119,44 @@ package {
 					_mainToWorkerChannel.send(messageQueue[0]);
 				}
 			}
+			else if (message == MessageEnum.INIT_DRAW) {
+				drawIncrement = 0;
+				drawData.dispose();
+				drawData = new BitmapData(backgroundWorker.getSharedProperty("imageWidth"), backgroundWorker.getSharedProperty("imageHeight"));
+				_mainToWorkerChannel.send(MessageEnum.SEND_DRAW_CONFIRMATION);
+			}
 			else if (message == MessageEnum.DRAW_COMPLETE) {
-				var bytes:ByteArray = backgroundWorker.getSharedProperty("imageBytes");
-				var imageWidth:uint = bytes.readUnsignedInt();
-				var imageHeight:uint =  bytes.readUnsignedInt();
-				var data:BitmapData = new BitmapData(imageWidth, imageHeight);
-				data.setPixels(data.rect, bytes);
-				var bitmap:Bitmap = new Bitmap(data);
-				_mainDrawable.removeChildren();
-				_mainDrawable.addChild(bitmap);
-				backgroundWorker.getSharedProperty("imageBytes").length = 0;
+				drawData.unlock();
+				drawBitmap.bitmapData = drawData;
+				backgroundWorker.getSharedProperty("imageBytes").clear();
+				_mainDrawable.addChild(drawBitmap);
 				debug.text = "";
 				debug.width = debug.height = 0;
 				_mainDrawable.scaleX = _mainDrawable.scaleY = 1;
 				_mainDrawable.x = (stage.stageWidth - _mainDrawable.width) / 2;
 				_mainDrawable.y = (stage.stageHeight - _mainDrawable.height) / 2;
+				messageQueue.shift();
+				
+				if (messageQueue.length > 0) {
+					_mainToWorkerChannel.send(messageQueue[0]);
+				}
+			}
+			else if (message == MessageEnum.CHUNK_COMPLETE) {
+				var bytes:ByteArray = backgroundWorker.getSharedProperty("imageBytes");
+				var imageWidth:uint = drawData.width;
+				var imageHeight:uint =  drawData.height;
+				var segmentWidth:uint = Math.ceil(imageWidth / 1000);
+				var startX:uint = drawIncrement % segmentWidth * 1000;
+				var startY:uint = Math.floor(drawIncrement / segmentWidth) * 1000;
+				var drawWidth:uint = imageWidth - startX;
+				var drawHeight:uint = imageHeight - startY;
+				
+				if (drawWidth > 1000) drawWidth = 1000;
+				if (drawHeight > 1000) drawHeight = 1000;
+				
+				bytes.position = 0;
+				drawData.setPixels(new Rectangle(startX, startY, drawWidth, drawHeight), bytes);
+				drawIncrement++;
 				_mainToWorkerChannel.send(MessageEnum.SEND_DRAW_CONFIRMATION);
 			}
 			else if (message.indexOf("File") != -1) {
@@ -225,6 +255,10 @@ package {
 			_mainDrawable.scaleY = Math.round(_mainDrawable.scaleY * 100) / 100;
 			_mainDrawable.x = stage.mouseX - _mainDrawable.width * xRatio;
 			_mainDrawable.y = stage.mouseY - _mainDrawable.height * yRatio;
+		}
+		
+		public static function lockDrawing():void {
+			drawData.lock();
 		}
 		
 		public static function sendMessage(message:*):void {

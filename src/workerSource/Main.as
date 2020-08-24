@@ -26,6 +26,8 @@ package {
 		private var fileName:String;
 		private var fileExtension:String;
 		private var currentState:String = "";
+		private var imageBytes:ByteArray = new ByteArray();
+		private var imageChunks:Vector.<Vector.<uint>> = new Vector.<Vector.<uint>>();
 		
 		public function Main() {
 			mainToWorkerChannel = Worker.current.getSharedProperty("mainToWorkerChannel");
@@ -91,7 +93,13 @@ package {
 					}
 				}
 				else if (message == MessageEnum.SEND_DRAW_CONFIRMATION) {
-					workerToMainChannel.send(MessageEnum.PREVIOUS_MESSAGE_COMPLETE);
+					if (imageChunks.length > 0) {
+						imageBytes.clear();
+						sendNextChunk();
+					}
+					else {
+						workerToMainChannel.send(MessageEnum.DRAW_COMPLETE);
+					}
 				}
 				else if (currentState != "") {
 					if (currentState == MessageEnum.CREATE_PALETTE) {
@@ -167,19 +175,22 @@ package {
 		}
 		
 		private function redrawBitmap(target:Bitmap):void {
-			var copyBitmap:Bitmap = new Bitmap(new BitmapData(target.width, target.height, true, 0));
 			var vectorWidth:uint = Math.ceil(target.width / SEGMENTATION);
 			var vectorHeight:uint = Math.ceil(target.height / SEGMENTATION);
 			var totalPixels:uint = target.width * target.height;
 			var increment:uint;
 			var pixels:Vector.<uint>;
-			var drawPixels:Vector.<uint> = new Vector.<uint>();
+			imageBytes.clear();
+			Worker.current.setSharedProperty("imageWidth", target.width);
+			Worker.current.setSharedProperty("imageHeight", target.height);
+			resetChunkVector();
 			
 			for (var i:uint = 0; i < vectorWidth * vectorHeight; i++) {
 				var startX:uint = i % vectorWidth * SEGMENTATION;
 				var startY:uint = Math.floor(i / vectorWidth) * SEGMENTATION;
 				var drawWidth:uint = target.width - startX;
 				var drawHeight:uint = target.height - startY;
+				imageChunks.push(new Vector.<uint>());
 				
 				if (drawWidth > SEGMENTATION) drawWidth = SEGMENTATION;
 				if (drawHeight > SEGMENTATION) drawHeight = SEGMENTATION;
@@ -191,29 +202,37 @@ package {
 					var currentPixel:uint = pixels[j];
 					var closest:Number = Palette.currentPalette.getLeastDifference((0xFFFFFF & currentPixel));
 					var alpha:Number = (currentPixel >> 24) & 0xFF;
-					drawPixels.push((alpha << 24) | closest);
+					imageChunks[i].push((alpha << 24) | closest);
 					increment++;
 					
 					if (increment % target.width == 0) {
 						workerToMainChannel.send("Drawing " + (Math.round(increment / totalPixels * 10000) / 100) + "% complete");
-					}
-					
-					if (j == pixels.length - 1) {
-						copyBitmap.bitmapData.setVector(drawRect, drawPixels);
-						drawPixels.length = 0;
 					}
 				}
 			}
 			
 			target.bitmapData.dispose();
 			target.bitmapData = null;
-			pixels.length = drawPixels.length = 0;
-			var bytes:ByteArray = new ByteArray();
-			bytes.writeUnsignedInt(copyBitmap.width);
-			bytes.writeUnsignedInt(copyBitmap.height);
-			bytes.writeBytes(copyBitmap.bitmapData.getPixels(copyBitmap.bitmapData.rect));
-			Worker.current.setSharedProperty("imageBytes", bytes);
-			workerToMainChannel.send(MessageEnum.DRAW_COMPLETE);
+			pixels.length = 0;
+			workerToMainChannel.send(MessageEnum.INIT_DRAW);
+		}
+		
+		private function resetChunkVector():void {
+			for (var i:uint = 0; i < imageChunks.length; i++) {
+				imageChunks[i].length = 0;
+			}
+			
+			imageChunks.length = 0;
+		}
+		
+		private function sendNextChunk():void {
+			for (var i:uint = 0; i < imageChunks[0].length; i++) {
+				imageBytes.writeUnsignedInt(imageChunks[0][i]);
+			}
+			
+			imageChunks.shift();
+			Worker.current.setSharedProperty("imageBytes", imageBytes);
+			workerToMainChannel.send(MessageEnum.CHUNK_COMPLETE);
 		}
 	}
 }

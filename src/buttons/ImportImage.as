@@ -28,6 +28,7 @@ package buttons {
 		
 		public function redrawImage():void {
 			if (Main.ready && Main.currentFileName != null) {
+				Main.lockDrawing();
 				Main.sendMessage(MessageEnum.DRAW_PALETTE);
 			}
 		}
